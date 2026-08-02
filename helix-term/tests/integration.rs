@@ -17,6 +17,7 @@ mod test {
 
     mod auto_pairs;
     mod command_line;
+    mod command_sequences;
     mod commands;
     mod movement;
     mod splits;

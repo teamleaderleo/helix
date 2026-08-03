@@ -1,18 +1,40 @@
 use super::*;
 
-fn final_window_sequence_config() -> anyhow::Result<Config> {
-    let raw: helix_term::config::ConfigRaw = toml::from_str(
-        r#"
-        [keys.insert]
-        C-q = ["wclose", "normal_mode"]
-        "#,
-    )?;
+fn keymap_config(keys: &str) -> anyhow::Result<Config> {
+    let raw: helix_term::config::ConfigRaw = toml::from_str(keys)?;
 
     Ok(Config {
         theme: raw.theme,
         keys: raw.keys.unwrap_or_default(),
         editor: test_editor_config(),
     })
+}
+
+fn final_window_close_config() -> anyhow::Result<Config> {
+    keymap_config(
+        r#"
+        [keys.insert]
+        C-q = "wclose"
+        "#,
+    )
+}
+
+fn final_window_sequence_config() -> anyhow::Result<Config> {
+    keymap_config(
+        r#"
+        [keys.insert]
+        C-q = ["wclose", "normal_mode"]
+        "#,
+    )
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn single_command_final_window_close_exits_cleanly() -> anyhow::Result<()> {
+    let mut app = AppBuilder::new()
+        .with_config(final_window_close_config()?)
+        .build()?;
+
+    test_key_sequence(&mut app, Some("i<C-q>"), None, true).await
 }
 
 #[tokio::test(flavor = "multi_thread")]

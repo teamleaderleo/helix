@@ -28,6 +28,15 @@ fn final_window_sequence_config() -> anyhow::Result<Config> {
     )
 }
 
+fn normal_mode_final_window_sequence_config() -> anyhow::Result<Config> {
+    keymap_config(
+        r#"
+        [keys.normal]
+        C-q = ["wclose", "move_char_right"]
+        "#,
+    )
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn single_command_final_window_close_exits_cleanly() -> anyhow::Result<()> {
     let mut app = AppBuilder::new()
@@ -44,6 +53,15 @@ async fn command_sequence_after_final_window_close_exits_cleanly() -> anyhow::Re
         .build()?;
 
     test_key_sequence(&mut app, Some("i<C-q>"), None, true).await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn normal_mode_sequence_after_final_window_close_exits_cleanly() -> anyhow::Result<()> {
+    let mut app = AppBuilder::new()
+        .with_config(normal_mode_final_window_sequence_config()?)
+        .build()?;
+
+    test_key_sequence(&mut app, Some("<C-q>"), None, true).await
 }
 
 #[tokio::test(flavor = "multi_thread")]

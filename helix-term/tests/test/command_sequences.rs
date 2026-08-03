@@ -37,6 +37,15 @@ fn normal_mode_final_window_sequence_config() -> anyhow::Result<Config> {
     )
 }
 
+fn ordinary_sequence_config() -> anyhow::Result<Config> {
+    keymap_config(
+        r#"
+        [keys.normal]
+        C-q = ["insert_mode", "normal_mode"]
+        "#,
+    )
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn single_command_final_window_close_exits_cleanly() -> anyhow::Result<()> {
     let mut app = AppBuilder::new()
@@ -62,6 +71,25 @@ async fn normal_mode_sequence_after_final_window_close_exits_cleanly() -> anyhow
         .build()?;
 
     test_key_sequence(&mut app, Some("<C-q>"), None, true).await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn ordinary_command_sequence_runs_to_completion() -> anyhow::Result<()> {
+    let mut app = AppBuilder::new()
+        .with_config(ordinary_sequence_config()?)
+        .build()?;
+
+    test_key_sequence(
+        &mut app,
+        Some("<C-q>"),
+        Some(&|app| {
+            assert_eq!(1, app.editor.tree.views().count());
+            assert_eq!(helix_view::document::Mode::Normal, app.editor.mode());
+            helpers::assert_status_not_error(&app.editor);
+        }),
+        false,
+    )
+    .await
 }
 
 #[tokio::test(flavor = "multi_thread")]

@@ -56,6 +56,15 @@ fn macro_final_window_sequence_config() -> anyhow::Result<Config> {
     )
 }
 
+fn recorded_macro_config() -> anyhow::Result<Config> {
+    keymap_config(
+        r#"
+        [keys.normal]
+        C-x = "wclose"
+        "#,
+    )
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn single_command_final_window_close_exits_cleanly() -> anyhow::Result<()> {
     let mut app = AppBuilder::new()
@@ -157,6 +166,18 @@ async fn macro_continues_when_another_window_remains() -> anyhow::Result<()> {
         false,
     )
     .await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn recorded_macro_stops_after_final_window_close() -> anyhow::Result<()> {
+    let mut app = AppBuilder::new()
+        .with_config(recorded_macro_config()?)
+        .build()?;
+
+    // Record a macro while two views exist. Replaying it with one remaining
+    // view closes the editor on the first recorded key; later recorded keys
+    // must not be dispatched against the empty editor.
+    test_key_sequence(&mut app, Some("<C-w>vQ<C-x>lQq"), None, true).await
 }
 
 #[tokio::test(flavor = "multi_thread")]

@@ -1,3 +1,4 @@
+# Runs only on the owned implementation branch and its owned draft PR.
 name: Apply Round 004 replay fix
 
 on:

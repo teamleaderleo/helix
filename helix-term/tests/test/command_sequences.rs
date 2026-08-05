@@ -158,3 +158,15 @@ async fn macro_continues_when_another_window_remains() -> anyhow::Result<()> {
     )
     .await
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn counted_repeat_stops_after_replayed_final_window_close() -> anyhow::Result<()> {
+    let mut app = AppBuilder::new()
+        .with_config(final_window_sequence_config()?)
+        .build()?;
+
+    // Record an insert-mode close while another view remains. Replaying that
+    // insertion twice closes the final view on the first iteration; the repeat
+    // loop must not start a second iteration against the empty editor.
+    test_key_sequence(&mut app, Some("<C-w>vi<C-q>2."), None, true).await
+}

@@ -1,0 +1,1 @@
+Unique synchronization marker for the clean replay-loop candidate.

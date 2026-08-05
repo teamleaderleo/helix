@@ -1,6 +1,9 @@
 name: Owned Round 004 replay fix
 
 on:
+  push:
+    branches:
+      - master
   pull_request_target:
     branches:
       - review/16136-round-004-controls
@@ -19,7 +22,7 @@ env:
 
 jobs:
   patch-test-commit:
-    if: github.repository == 'teamleaderleo/helix' && github.event.pull_request.head.repo.full_name == 'teamleaderleo/helix' && github.event.pull_request.head.ref == 'fix/final-view-replay-loops'
+    if: github.repository == 'teamleaderleo/helix' && (github.event_name == 'push' || (github.event.pull_request.head.repo.full_name == 'teamleaderleo/helix' && github.event.pull_request.head.ref == 'fix/final-view-replay-loops'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:

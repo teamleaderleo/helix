@@ -1,0 +1,32 @@
+name: Round 004 replay controls
+
+on:
+  push:
+    branches:
+      - verify/16136-replay-focused
+
+permissions:
+  contents: read
+
+env:
+  MSRV: "1.90"
+  RUST_BACKTRACE: 1
+  HELIX_LOG_LEVEL: info
+
+jobs:
+  replay-controls:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v7
+
+      - name: Setup Rust
+        uses: ./.github/actions/rust-setup
+        with:
+          toolchain: ${{ env.MSRV }}
+          cache-key: round-004-replay
+          cache-grammars: "true"
+
+      - name: Run command-sequence and replay controls
+        run: cargo integration-test command_sequences -- --nocapture

@@ -1,2 +1,3 @@
 Owned PR synchronization marker for the replay-fix workflow.
 Default-branch workflow installed.
+Trusted PR-target workflow installed.

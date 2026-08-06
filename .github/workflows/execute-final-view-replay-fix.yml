@@ -1,0 +1,151 @@
+name: Execute final-view replay fix
+
+on:
+  pull_request:
+    branches:
+      - review/16136-round-004-controls
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+permissions:
+  contents: write
+
+env:
+  MSRV: "1.90"
+  RUST_BACKTRACE: 1
+  HELIX_LOG_LEVEL: info
+
+jobs:
+  patch-test-commit:
+    if: github.repository == 'teamleaderleo/helix' && github.event.pull_request.head.repo.full_name == 'teamleaderleo/helix' && github.event.pull_request.head.ref == 'fix/final-view-replay-loops-clean'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout clean candidate branch
+        uses: actions/checkout@v7
+        with:
+          ref: fix/final-view-replay-loops-clean
+          fetch-depth: 0
+
+      - name: Apply terminal checks to replay loops
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              if old in text:
+                  if text.count(old) != 1:
+                      raise SystemExit(f"{label} matched more than once")
+                  return text.replace(old, new, 1)
+              if new in text:
+                  return text
+              raise SystemExit(f"{label} did not match expected source")
+
+          commands = Path("helix-term/src/commands.rs")
+          text = commands.read_text()
+
+          configured_old = '''                    for key in keys.into_iter() {
+                        compositor.handle_event(&compositor::Event::Key(key), cx);
+                    }
+                    cx.editor.macro_replaying.pop();'''
+          configured_new = '''                    for key in keys.into_iter() {
+                        compositor.handle_event(&compositor::Event::Key(key), cx);
+                        if cx.editor.should_close() {
+                            break;
+                        }
+                    }
+                    cx.editor.macro_replaying.pop();'''
+          text = replace_once(text, configured_old, configured_new, "configured macro loop")
+
+          recorded_old = '''        for _ in 0..count {
+            for &key in keys.iter() {
+                compositor.handle_event(&compositor::Event::Key(key), cx);
+            }
+        }
+        // The macro under replay is cleared at the end of the callback'''
+          recorded_new = '''        'replay: for _ in 0..count {
+            for &key in keys.iter() {
+                compositor.handle_event(&compositor::Event::Key(key), cx);
+                if cx.editor.should_close() {
+                    break 'replay;
+                }
+            }
+        }
+        // The macro under replay is cleared at the end of the callback'''
+          text = replace_once(text, recorded_old, recorded_new, "recorded macro loop")
+          commands.write_text(text)
+
+          editor = Path("helix-term/src/ui/editor.rs")
+          text = editor.read_text()
+
+          repeat_header_old = '''                for _ in 0..cxt.editor.count.map_or(1, NonZeroUsize::into) {
+                    // first execute whatever put us into insert mode
+                    self.last_insert.0.execute(cxt);
+                    let mut last_savepoint = None;'''
+          repeat_header_new = '''                'repeat: for _ in 0..cxt.editor.count.map_or(1, NonZeroUsize::into) {
+                    // first execute whatever put us into insert mode
+                    self.last_insert.0.execute(cxt);
+                    if cxt.editor.should_close() {
+                        break 'repeat;
+                    }
+                    let mut last_savepoint = None;'''
+          text = replace_once(text, repeat_header_old, repeat_header_new, "dot-repeat header")
+
+          repeat_tail_old = '''                            InsertEvent::RequestCompletion => {
+                                let (view, doc) = current!(cxt.editor);
+                                last_request_savepoint = Some(doc.savepoint(view));
+                            }
+                        }
+                    }
+                }
+                cxt.editor.count = None;'''
+          repeat_tail_new = '''                            InsertEvent::RequestCompletion => {
+                                let (view, doc) = current!(cxt.editor);
+                                last_request_savepoint = Some(doc.savepoint(view));
+                            }
+                        }
+                        if cxt.editor.should_close() {
+                            break 'repeat;
+                        }
+                    }
+                }
+                cxt.editor.count = None;'''
+          text = replace_once(text, repeat_tail_old, repeat_tail_new, "dot-repeat tail")
+          editor.write_text(text)
+
+      - name: Setup Rust
+        uses: ./.github/actions/rust-setup
+        with:
+          toolchain: ${{ env.MSRV }}
+          cache-key: final-view-replay-fix
+          cache-grammars: "true"
+
+      - name: Format
+        run: cargo fmt --all
+
+      - name: Run focused replay tests
+        run: cargo integration-test command_sequences -- --nocapture
+
+      - name: Run workspace tests
+        run: cargo test --workspace
+
+      - name: Commit clean source candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code --check
+          if git diff --quiet; then
+            echo "Candidate is already applied"
+            exit 0
+          fi
+          changed=$(git diff --name-only | sort)
+          expected=$(printf '%s\n' helix-term/src/commands.rs helix-term/src/ui/editor.rs | sort)
+          test "$changed" = "$expected"
+          git config user.name "teamleaderleo"
+          git config user.email "13091533+teamleaderleo@users.noreply.github.com"
+          git add helix-term/src/commands.rs helix-term/src/ui/editor.rs
+          git rm -f .github/workflows/apply-final-view-replay-fix.yml .github/round-004-clean-sync.txt || true
+          git commit -m "fix: stop replay loops after closing final view"
+          git push origin HEAD:fix/final-view-replay-loops-clean

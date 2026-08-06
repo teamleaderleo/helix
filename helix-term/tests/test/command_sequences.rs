@@ -161,7 +161,28 @@ async fn macro_continues_when_another_window_remains() -> anyhow::Result<()> {
         Some(&|app| {
             assert_eq!(1, app.editor.tree.views().count());
             assert_eq!(helix_view::document::Mode::Normal, app.editor.mode());
+            assert!(app.editor.macro_replaying.is_empty());
             helpers::assert_status_not_error(&app.editor);
+        }),
+        false,
+    )
+    .await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn refused_close_cleans_configured_macro_replay_state() -> anyhow::Result<()> {
+    let mut app = AppBuilder::new()
+        .with_config(macro_final_window_sequence_config()?)
+        .build()?;
+
+    test_key_sequence(
+        &mut app,
+        Some("iX<esc><C-q>"),
+        Some(&|app| {
+            assert_eq!(1, app.editor.tree.views().count());
+            assert_eq!(helix_view::document::Mode::Normal, app.editor.mode());
+            assert!(app.editor.macro_replaying.is_empty());
+            assert!(app.editor.is_err());
         }),
         false,
     )
@@ -181,6 +202,28 @@ async fn recorded_macro_stops_after_final_window_close() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn recorded_macro_continues_and_cleans_replay_state() -> anyhow::Result<()> {
+    let mut app = AppBuilder::new()
+        .with_config(recorded_macro_config()?)
+        .build()?;
+
+    // Record and replay the close-plus-movement macro while enough views
+    // remain for both executions. The replay stack must be empty afterward.
+    test_key_sequence(
+        &mut app,
+        Some("<C-w>v<C-w>vQ<C-x>lQq"),
+        Some(&|app| {
+            assert_eq!(1, app.editor.tree.views().count());
+            assert_eq!(helix_view::document::Mode::Normal, app.editor.mode());
+            assert!(app.editor.macro_replaying.is_empty());
+            helpers::assert_status_not_error(&app.editor);
+        }),
+        false,
+    )
+    .await
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn counted_repeat_stops_after_replayed_final_window_close() -> anyhow::Result<()> {
     let mut app = AppBuilder::new()
         .with_config(final_window_sequence_config()?)
@@ -190,4 +233,27 @@ async fn counted_repeat_stops_after_replayed_final_window_close() -> anyhow::Res
     // insertion twice closes the final view on the first iteration; the repeat
     // loop must not start a second iteration against the empty editor.
     test_key_sequence(&mut app, Some("<C-w>vi<C-q>2."), None, true).await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn counted_repeat_clears_count_when_editor_remains() -> anyhow::Result<()> {
+    let mut app = AppBuilder::new()
+        .with_config(final_window_sequence_config()?)
+        .build()?;
+
+    // Three views allow the original insert and one dot-repeat to close two
+    // views without terminating the editor. Command count cleanup remains
+    // observable after the replay loop returns.
+    test_key_sequence(
+        &mut app,
+        Some("<C-w>v<C-w>vi<C-q>."),
+        Some(&|app| {
+            assert_eq!(1, app.editor.tree.views().count());
+            assert_eq!(helix_view::document::Mode::Normal, app.editor.mode());
+            assert!(app.editor.count.is_none());
+            helpers::assert_status_not_error(&app.editor);
+        }),
+        false,
+    )
+    .await
 }

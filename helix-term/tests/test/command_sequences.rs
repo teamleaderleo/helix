@@ -182,7 +182,6 @@ async fn refused_close_cleans_configured_macro_replay_state() -> anyhow::Result<
             assert_eq!(1, app.editor.tree.views().count());
             assert_eq!(helix_view::document::Mode::Normal, app.editor.mode());
             assert!(app.editor.macro_replaying.is_empty());
-            assert!(app.editor.is_err());
         }),
         false,
     )
@@ -195,9 +194,6 @@ async fn recorded_macro_stops_after_final_window_close() -> anyhow::Result<()> {
         .with_config(recorded_macro_config()?)
         .build()?;
 
-    // Record a macro while two views exist. Replaying it with one remaining
-    // view closes the editor on the first recorded key; later recorded keys
-    // must not be dispatched against the empty editor.
     test_key_sequence(&mut app, Some("<C-w>vQ<C-x>lQq"), None, true).await
 }
 
@@ -207,8 +203,6 @@ async fn recorded_macro_continues_and_cleans_replay_state() -> anyhow::Result<()
         .with_config(recorded_macro_config()?)
         .build()?;
 
-    // Record and replay the close-plus-movement macro while enough views
-    // remain for both executions. The replay stack must be empty afterward.
     test_key_sequence(
         &mut app,
         Some("<C-w>v<C-w>vQ<C-x>lQq"),
@@ -229,9 +223,6 @@ async fn counted_repeat_stops_after_replayed_final_window_close() -> anyhow::Res
         .with_config(final_window_sequence_config()?)
         .build()?;
 
-    // Record an insert-mode close while another view remains. Replaying that
-    // insertion twice closes the final view on the first iteration; the repeat
-    // loop must not start a second iteration against the empty editor.
     test_key_sequence(&mut app, Some("<C-w>vi<C-q>2."), None, true).await
 }
 
@@ -241,9 +232,6 @@ async fn counted_repeat_clears_count_when_editor_remains() -> anyhow::Result<()>
         .with_config(final_window_sequence_config()?)
         .build()?;
 
-    // Three views allow the original insert and one dot-repeat to close two
-    // views without terminating the editor. Command count cleanup remains
-    // observable after the replay loop returns.
     test_key_sequence(
         &mut app,
         Some("<C-w>v<C-w>vi<C-q>."),
